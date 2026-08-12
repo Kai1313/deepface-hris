@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# HRIS runtime artifacts (contains face embeddings = biometric data — never commit)
+HRIS/hris.db
+HRIS/hris.log
+
+# OS junk
+.DS_Store
+Thumbs.db

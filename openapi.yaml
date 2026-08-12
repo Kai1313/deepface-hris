@@ -1,0 +1,169 @@
+# Contract for the DeepFace service. The consumer service codes against THIS file.
+# Generated from deepface/api/src/modules/core/routes.py (v1 behavior).
+openapi: 3.0.3
+info:
+  title: DeepFace API
+  description: |
+    Face verification, analysis and embeddings. Images accepted as:
+      - multipart file uploads (field names img1/img2/img)
+      - JSON/urlencoded strings: base64 data URI, file path inside container, or https URL
+    Auth: if DEEPFACE_AUTH_TOKEN is set, send `Authorization: Bearer <token>`.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5005
+security:
+  - bearerAuth: []
+paths:
+  /:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: HTML welcome page
+  /verify:
+    post:
+      summary: Determine whether two images are the same person
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerifyResult' }
+        '400':
+          description: Missing image or no face detected (enforce_detection)
+  /analyze:
+    post:
+      summary: Predict age, gender, emotion, race for a face
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/AnalyzeRequest' }
+          application/json:
+            schema: { $ref: '#/components/schemas/AnalyzeRequest' }
+      responses:
+        '200':
+          description: List of demographic predictions (one per detected face)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+        '400':
+          description: Missing image or no face detected
+  /represent:
+    post:
+      summary: Convert a face to an embedding vector
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/RepresentRequest' }
+          application/json:
+            schema: { $ref: '#/components/schemas/RepresentRequest' }
+      responses:
+        '200':
+          description: Embeddings (one entry per detected face)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    embedding: { type: array, items: { type: number } }
+                    facial_area: { type: object }
+                    face_confidence: { type: number }
+        '400':
+          description: Missing image or no face detected
+  /register:
+    post:
+      summary: Store an embedding in the configured vector DB
+      description: Returns 500 unless a vector database is configured (DEEPFACE_CONNECTION_DETAILS). Not active in the default v1 deployment.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/RepresentRequest' }
+          application/json:
+            schema: { $ref: '#/components/schemas/RepresentRequest' }
+      responses:
+        '200': { description: Registered }
+        '500': { description: No database configured }
+  /search:
+    post:
+      summary: Find matching identities in the configured vector DB
+      description: Returns 500 unless a vector database is configured. Not active in the default v1 deployment.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/RepresentRequest' }
+          application/json:
+            schema: { $ref: '#/components/schemas/RepresentRequest' }
+      responses:
+        '200':
+          description: List of matching identities (name, distance, identity)
+        '500': { description: No database configured }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    VerifyRequest:
+      type: object
+      required: [img1, img2]
+      properties:
+        img1: { type: string, description: 'file upload, or base64/path/url string' }
+        img2: { type: string, description: 'file upload, or base64/path/url string' }
+        model_name: { type: string, default: VGG-Face, enum: [VGG-Face, Facenet, Facenet512, OpenFace, DeepFace, DeepID, ArcFace, Dlib, SFace, GhostFaceNet, Buffalo_L] }
+        detector_backend: { type: string, default: opencv, enum: [opencv, ssd, dlib, mtcnn, fastmtcnn, retinaface, mediapipe, yunet, centerface] }
+        distance_metric: { type: string, default: cosine, enum: [cosine, euclidean, euclidean_l2] }
+        align: { type: boolean, default: true }
+        enforce_detection: { type: boolean, default: true }
+        anti_spoofing: { type: boolean, default: false }
+    VerifyResult:
+      type: object
+      properties:
+        verified: { type: boolean }
+        distance: { type: number }
+        threshold: { type: number }
+        model: { type: string }
+        detector_backend: { type: string }
+        similarity_metric: { type: string }
+        facial_areas: { type: object }
+        time: { type: number }
+    AnalyzeRequest:
+      type: object
+      required: [img]
+      properties:
+        img: { type: string, description: 'file upload, or base64/path/url string' }
+        actions: { type: string, default: '["age","gender","emotion","race"]', description: 'e.g. age,gender as JSON array string' }
+        detector_backend: { type: string, default: opencv }
+        align: { type: boolean, default: true }
+        enforce_detection: { type: boolean, default: true }
+        anti_spoofing: { type: boolean, default: false }
+    RepresentRequest:
+      type: object
+      required: [img]
+      properties:
+        img: { type: string, description: 'file upload, or base64/path/url string' }
+        model_name: { type: string, default: VGG-Face }
+        detector_backend: { type: string, default: opencv }
+        align: { type: boolean, default: true }
+        enforce_detection: { type: boolean, default: true }
+        anti_spoofing: { type: boolean, default: false }
+        max_faces: { type: integer, description: 'limit number of faces, useful for group photos' }

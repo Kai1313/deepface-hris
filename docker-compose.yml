@@ -1,0 +1,24 @@
+# DeepFace as a standalone HTTP service.
+# Your other service talks to it over HTTP at http://deepface:5005 (compose network)
+# or http://localhost:5005 (host). No deepface code needed in the consumer.
+services:
+  deepface:
+    image: serengil/deepface:latest   # official image, API baked in
+    container_name: deepface
+    ports:
+      - "5005:5000"                   # image listens on 5000 internally; we expose 5005
+    env_file: .env                    # model config + optional auth token
+    volumes:
+      - deepface-weights:/root/.deepface   # model weights persist across restarts
+    healthcheck:
+      # python urllib instead of curl: the image doesn't ship curl
+      test: ["CMD", "python", "-c",
+        "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s              # first boot downloads ~100MB of weights; be patient
+    restart: unless-stopped           # survives reboots/crashes
+
+volumes:
+  deepface-weights:

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HRIS Check-in</title>
+<style>
+body{font-family:system-ui;max-width:640px;margin:2rem auto;padding:0 1rem}
+video{width:100%;max-width:480px;background:#000;border-radius:8px}
+button{font-size:1rem;padding:.5rem 1rem;margin:.25rem}
+#status{margin:1rem 0;padding:.75rem;border-radius:6px;background:#eee;font-weight:bold}
+#status.ok{background:#d4edda;border-left:6px solid #28a745}
+#status.err{background:#f8d7da;border-left:6px solid #dc3545}
+table{width:100%;border-collapse:collapse}
+td,th{border:1px solid #ddd;padding:.4rem;text-align:left}
+</style>
+</head>
+<body>
+<h1>HRIS Check-in</h1>
+
+<video id="cam" autoplay playsinline></video><br>
+<button id="cap">📸 Capture</button>
+<input type="file" id="file" accept="image/*" hidden>
+<button id="fileBtn">📁 Upload instead</button>
+<canvas id="canvas" hidden></canvas>
+
+<section id="enroll">
+  <h2>Enroll employee (2–4 photos)</h2>
+  <input id="name" placeholder="Full name">
+  <button id="enrollBtn">Enroll this photo</button>
+</section>
+
+<section>
+  <h2>Check</h2>
+  <button id="inBtn">⬇ Check-in</button>
+  <button id="outBtn">⬆ Check-out</button>
+</section>
+
+<div id="status">Starting camera…</div>
+<p style="font-size:.85rem;color:#666">How to read the match: <b>0.00</b> = identical face · below <b>0.40</b> = recognized · <b>0.40+</b> = rejected (different person) · <b>~1.00</b> = completely different</p>
+
+<h2>Recent punches</h2>
+<table>
+  <thead><tr><th>When</th><th>Name</th><th>Type</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script>
+const video = document.getElementById('cam');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+let current = null; // {blob} from explicit capture/upload
+
+// Camera is only available on localhost or HTTPS. Guard so the page still works without it.
+if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}})
+    .then(s => { video.srcObject = s; setStatus('Camera ready — press Check-in or Check-out','ok'); })
+    .catch(() => setStatus('Camera blocked — use Upload, or open via http://localhost:8000','err'));
+} else {
+  setStatus('No camera (open via http://localhost:8000 for camera) — use Upload','err');
+}
+
+function snap() {
+  // grab a frame from the live camera; null when no camera/feed
+  if (!video.videoWidth) return null;
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+  return new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
+}
+
+document.getElementById('cap').onclick = async () => {
+  const b = await snap();
+  if (!b) return setStatus('No camera frame — use Upload instead','err');
+  current = {blob: b};
+  setStatus('Photo captured — enroll or check','ok');
+};
+document.getElementById('fileBtn').onclick = () => document.getElementById('file').click();
+document.getElementById('file').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  current = {blob: f}; setStatus('File ready — enroll or check','ok');
+};
+
+function form(blob) { const fd = new FormData(); if (blob) fd.append('photo', blob, 'photo.jpg'); return fd; }
+function post(url, fd) { return fetch(url, {method:'POST', body: fd}).then(r => r.json()); }
+
+async function getPhoto(label) {
+  // fresh live frame first (real attendance = the face right now);
+  // fall back to explicit Capture/Upload only when no camera
+  const b = await snap();
+  if (b) return b;
+  if (current) return current.blob;
+  setStatus(`${label}: no photo — capture or upload one first`,'err');
+  return null;
+}
+
+document.getElementById('enrollBtn').onclick = async () => {
+  const name = document.getElementById('name').value.trim();
+  if (!name) return setStatus('Enter a name first','err');
+  const blob = await getPhoto('Enroll');
+  if (!blob) return;
+  const fd = form(blob); fd.append('name', name);
+  const r = await post('/enroll', fd);
+  r.ok ? setStatus(`Enrolled ${r.name} (${r.photos} photos) — add 2–4 total`,'ok')
+       : setStatus('Enroll failed: ' + r.error,'err');
+};
+
+async function check(ep, label) {
+  const blob = await getPhoto(label);
+  if (!blob) return;
+  const r = await post(ep, form(blob));
+  r.ok ? setStatus(`${label}: ${r.name} (match ${r.distance} of 0.40 — ${r.label}) @ ${r.at}`,'ok')
+       : setStatus(`${label}: ${r.reason || r.error}${r.label ? ' (' + r.label + ')' : ''}`,'err');
+  loadPunches();
+}
+document.getElementById('inBtn').onclick  = () => check('/checkin',  'Check-in');
+document.getElementById('outBtn').onclick = () => check('/checkout', 'Check-out');
+
+function setStatus(msg, cls) { statusEl.className = cls; statusEl.textContent = msg; }
+async function loadPunches() {
+  const rows = await fetch('/punches').then(r => r.json());
+  document.getElementById('rows').innerHTML = rows.map(p =>
+    `<tr><td>${p.at}</td><td>${p.name}</td><td>${p.punch_type}</td></tr>`).join('');
+}
+loadPunches();
+</script>
+</body>
+</html>
