@@ -9,7 +9,7 @@ as a pure-HTTP face-embedding helper. See `PLAN.md` for the design and build ste
 
 ```bash
 # 1. DeepFace service (repo root) — must be up and healthy first
-cd .. && docker compose up -d
+cd .. && cp .env.example .env && docker compose up -d
 curl localhost:5005/          # expect <h1>Welcome to DeepFace API...
 
 # 2. HRIS app

@@ -1,3 +1,6 @@
+# DeepFace service env (copy from .env.example; may hold the auth token — never commit)
+.env
+
 # Python
 __pycache__/
 *.pyc

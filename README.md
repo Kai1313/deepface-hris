@@ -7,8 +7,9 @@ code lives here; the consumer service just makes HTTP calls.
 > **`HRIS/`** — a working consumer built on this service: face check-in/check-out kiosk.
 > See `HRIS/README.md` for its docs, `HRIS/PLAN.md` for its build plan.
 
-> `.env` is committed (no secrets; only model config). If you later set
-> `DEEPFACE_AUTH_TOKEN` in it, gitignore `.env` and commit a `.env.example` instead.
+> `.env.example` is committed (no secrets; model config only). Before first run:
+> `cp .env.example .env` — the real `.env` is gitignored, so it can safely hold
+> `DEEPFACE_AUTH_TOKEN` later.
 
 ```
 consumer service ──HTTP──► deepface:5005 (docker network) / localhost:5005 (host)
@@ -61,7 +62,7 @@ Images also arrive as multipart file uploads (`-F img1=@a.jpg -F img2=@b.jpg`) o
 | File | Role |
 |---|---|
 | `docker-compose.yml` | service def: port, healthcheck, restart, weights volume |
-| `.env` | model choice + optional auth token (see below) |
+| `.env.example` | model choice + optional auth token (copy to `.env`, which is gitignored) |
 | `openapi.yaml` | machine-readable contract — consumer devs/client-generators code against this |
 | `README.md` | this file: humans + AI handoff |
 
